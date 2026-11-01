@@ -52,6 +52,15 @@ type hostHTTPReq struct {
 }
 
 type quotaCallbackContextKey struct{}
+type inferenceCallbackContextKey struct{}
+
+func invocationCallbackID(ctx context.Context) string {
+	if id, _ := ctx.Value(inferenceCallbackContextKey{}).(string); id != "" {
+		return id
+	}
+	id, _ := ctx.Value(quotaCallbackContextKey{}).(string)
+	return id
+}
 
 type hostAuthListResponse struct {
 	Files []pluginapi.HostAuthFileEntry `json:"files"`
@@ -290,7 +299,7 @@ func (b *HostBridge) invoke(ctx context.Context, method string, payload any, wha
 // "host.http.do"; transport-level failures surface as errors whose text is
 // safe for logs (no keys, no response bodies).
 func (b *HostBridge) Do(ctx context.Context, req pluginapi.HTTPRequest) (pluginapi.HTTPResponse, error) {
-	callbackID, _ := ctx.Value(quotaCallbackContextKey{}).(string)
+	callbackID := invocationCallbackID(ctx)
 	env, err := b.invoke(ctx, pluginabi.MethodHostHTTPDo, hostHTTPReq{
 		HostCallbackID: callbackID,
 		Method:         req.Method, URL: req.URL, Headers: req.Headers, Body: req.Body,
@@ -316,7 +325,8 @@ func (b *HostBridge) Do(ctx context.Context, req pluginapi.HTTPRequest) (plugina
 // no registered upstream stream ever leaks regardless of host latency.
 func (b *HostBridge) DoStream(ctx context.Context, req pluginapi.HTTPRequest) (statusCode int, headers http.Header, upstreamStreamID string, err error) {
 	payloadBytes, _ := json.Marshal(hostHTTPReq{
-		Method: req.Method, URL: req.URL, Headers: req.Headers, Body: req.Body,
+		HostCallbackID: invocationCallbackID(ctx),
+		Method:         req.Method, URL: req.URL, Headers: req.Headers, Body: req.Body,
 	})
 	raw, late, err := b.callWithTimeoutResult(ctx, pluginabi.MethodHostHTTPDoStream, payloadBytes, streamTimeoutGrace, b.closeLateStream)
 	if late {

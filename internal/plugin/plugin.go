@@ -142,8 +142,9 @@ func (m *Manager) HandleCall(method string, request []byte) (resp []byte, err er
 		return okEnvelope(struct {
 			pluginapi.QuotaDescribeResponse
 			ScopedHTTP          bool   `json:"scoped_http"`
+			ScopedInferenceHTTP bool   `json:"inference_scoped_http"`
 			DefaultQuotaBaseURL string `json:"default_quota_base_url"`
-		}{pluginapi.QuotaDescribeResponse{SupportedProviders: []string{ProviderID}, DisplayName: "OpenCode Go"}, true, config.DefaultBaseURL}), nil
+		}{pluginapi.QuotaDescribeResponse{SupportedProviders: []string{ProviderID}, DisplayName: "OpenCode Go"}, true, true, config.DefaultBaseURL}), nil
 	case pluginabi.MethodQuotaFetch:
 		var req struct {
 			pluginapi.QuotaFetchRequest
