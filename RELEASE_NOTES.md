@@ -1,3 +1,15 @@
+## SPEC92 / #77: selected inference callback scope
+
+- Preserve the host-issued invocation callback ID through nonstream and streaming
+  inference HTTP callbacks, including downstream WebSocket turns translated to HTTP.
+- Advertise additive `inference_scoped_http` metadata only in the updated binary.
+  This is anonymous JSON wire extension on published SDK v8.0.0, not an ABI or
+  dependency-pin change. Older binaries remain ineligible for scoped host gates.
+- The host owns durable gates/admission. This plugin does not interpret money,
+  modify manual-disabled/model exclusions, or bypass trusted management quota.
+- Add offline invocation-wire tests and opt-in isolated actual-Core/DLL live smoke.
+  No default live runtime/provider calls, new timeouts, or user settings.
+
 ## SPEC #92 / #75: scoped management quota callbacks
 
 - Forward each quota invocation's host-issued `host_callback_id` through its
