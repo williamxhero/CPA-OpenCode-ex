@@ -141,9 +141,9 @@ func (m *Manager) HandleCall(method string, request []byte) (resp []byte, err er
 		// published SDK while current hosts can decode the extended contract.
 		return okEnvelope(struct {
 			pluginapi.QuotaDescribeResponse
-			ScopedHTTP bool `json:"scoped_http"`
+			ScopedHTTP          bool   `json:"scoped_http"`
 			DefaultQuotaBaseURL string `json:"default_quota_base_url"`
-		}{pluginapi.QuotaDescribeResponse{SupportedProviders: []string{ProviderID}, DisplayName: "OpenCode Go"},true,config.DefaultBaseURL}), nil
+		}{pluginapi.QuotaDescribeResponse{SupportedProviders: []string{ProviderID}, DisplayName: "OpenCode Go"}, true, config.DefaultBaseURL}), nil
 	case pluginabi.MethodQuotaFetch:
 		var req struct {
 			pluginapi.QuotaFetchRequest

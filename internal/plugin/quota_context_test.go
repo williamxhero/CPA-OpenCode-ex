@@ -33,9 +33,12 @@ func TestQuotaInvocationCallbackContextIsForwarded(t *testing.T) {
 	if calls != 1 {
 		t.Fatal("quota invoked a fallback or duplicate request")
 	}
-	var description struct {ScopedHTTP bool `json:"scoped_http"`;DefaultQuotaBaseURL string `json:"default_quota_base_url"`}
+	var description struct {
+		ScopedHTTP          bool   `json:"scoped_http"`
+		DefaultQuotaBaseURL string `json:"default_quota_base_url"`
+	}
 	decodeResult(t, mustHandle(t, m, pluginabi.MethodQuotaDescribe, []byte(`{}`)), &description)
-	if !description.ScopedHTTP || description.DefaultQuotaBaseURL!=config.DefaultBaseURL {
+	if !description.ScopedHTTP || description.DefaultQuotaBaseURL != config.DefaultBaseURL {
 		t.Fatal("scoped quota capability not advertised")
 	}
 }
