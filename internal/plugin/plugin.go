@@ -137,13 +137,23 @@ func (m *Manager) HandleCall(method string, request []byte) (resp []byte, err er
 	case pluginabi.MethodQuotaIdentifier:
 		return okEnvelope(map[string]string{"identifier": ProviderID}), nil
 	case pluginabi.MethodQuotaDescribe:
-		return okEnvelope(pluginapi.QuotaDescribeResponse{SupportedProviders: []string{ProviderID}, DisplayName: "OpenCode Go"}), nil
+		// Additive wire metadata keeps standalone builds compatible with the
+		// published SDK while current hosts can decode the extended contract.
+		return okEnvelope(struct {
+			pluginapi.QuotaDescribeResponse
+			ScopedHTTP bool `json:"scoped_http"`
+			DefaultQuotaBaseURL string `json:"default_quota_base_url"`
+		}{pluginapi.QuotaDescribeResponse{SupportedProviders: []string{ProviderID}, DisplayName: "OpenCode Go"},true,config.DefaultBaseURL}), nil
 	case pluginabi.MethodQuotaFetch:
-		var req pluginapi.QuotaFetchRequest
+		var req struct {
+			pluginapi.QuotaFetchRequest
+			HostCallbackID string `json:"host_callback_id"`
+		}
 		if json.Unmarshal(request, &req) != nil {
 			return ErrEnvelope("invalid_request", "malformed quota request"), nil
 		}
-		result, err := m.FetchQuota(context.Background(), req)
+		ctx := context.WithValue(context.Background(), quotaCallbackContextKey{}, req.HostCallbackID)
+		result, err := m.FetchQuota(ctx, req.QuotaFetchRequest)
 		if err != nil {
 			return ErrEnvelope("quota_failure", err.Error()), nil
 		}
