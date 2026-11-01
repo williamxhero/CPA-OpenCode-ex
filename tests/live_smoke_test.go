@@ -8,12 +8,96 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
 	"time"
 )
+
+// TestLiveControlledScopedQuota is opt-in and NEVER contacts the default CPA
+// runtime. The parent harness supplies only its synthetic loopback fixture.
+func TestLiveControlledScopedQuota(t *testing.T) {
+	base := os.Getenv("CPA_QUOTA_CONTROLLED_BASE")
+	if base == "" {
+		t.Skip("explicit controlled Manager/Core/SQLite/TLS fixture required")
+	}
+	u, err := url.Parse(base)
+	if err != nil || u.Scheme != "http" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || !net.ParseIP(u.Hostname()).IsLoopback() {
+		t.Fatal("controlled fixture must be literal loopback")
+	}
+	key, index := os.Getenv("CPA_QUOTA_CONTROLLED_KEY"), os.Getenv("CPA_QUOTA_CONTROLLED_INDEX")
+	if key == "" || index == "" {
+		t.Fatal("controlled fixture auth/selector required")
+	}
+	client := &http.Client{Timeout: 5 * time.Second}
+	request := func(method, path string, body any) []byte {
+		t.Helper()
+		data, _ := json.Marshal(body)
+		req, _ := http.NewRequest(method, strings.TrimRight(base, "/")+path, bytes.NewReader(data))
+		req.Header.Set("Authorization", "Bearer "+key)
+		res, e := client.Do(req)
+		if e != nil {
+			t.Fatal(e)
+		}
+		defer res.Body.Close()
+		out, _ := io.ReadAll(io.LimitReader(res.Body, 2<<20))
+		if res.StatusCode != 200 && res.StatusCode != 202 {
+			t.Fatalf("controlled quota HTTP %d", res.StatusCode)
+		}
+		if bytes.Contains(out, []byte("CANARY")) {
+			t.Fatal("credential leaked")
+		}
+		return out
+	}
+	path := "/usage-service/credential-quota?authIndex=" + url.QueryEscape(index)
+	var state map[string]any
+	if json.Unmarshal(request("GET", path, nil), &state) != nil {
+		t.Fatal("invalid status")
+	}
+	q := map[string]any{"scope": state["scope"], "targets": state["targets"], "auth_index": index, "version": state["version"], "sourceVersion": state["sourceVersion"]}
+	var job struct {
+		ID    string `json:"id"`
+		State string `json:"state"`
+	}
+	if json.Unmarshal(request("POST", "/usage-service/credential-quota", q), &job) != nil {
+		t.Fatal("invalid job")
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for job.State == "running" {
+		if time.Now().After(deadline) {
+			t.Fatal("controlled query did not settle")
+		}
+		json.Unmarshal(request("GET", "/usage-service/credential-quota/jobs/"+job.ID, nil), &job)
+	}
+	var result struct {
+		LastSuccess struct {
+			WindowsJSON string `json:"windowsJson"`
+		} `json:"lastSuccess"`
+	}
+	if json.Unmarshal(request("GET", path, nil), &result) != nil {
+		t.Fatal("invalid result")
+	}
+	var windows struct {
+		Complete bool `json:"complete"`
+		Recovery bool `json:"recoveryEligible"`
+		Windows  []struct {
+			Name      string  `json:"name"`
+			Percent   float64 `json:"usedPercent"`
+			Remaining float64 `json:"remainingFraction"`
+			Status    string  `json:"sourceStatus"`
+		} `json:"windows"`
+	}
+	if json.Unmarshal([]byte(result.LastSuccess.WindowsJSON), &windows) != nil {
+		t.Fatal("missing quota observation")
+	}
+	if !windows.Complete || windows.Recovery || len(windows.Windows) != 3 || windows.Windows[0].Status != "rate-limited" || windows.Windows[0].Percent != 42 || windows.Windows[0].Remaining != 0 {
+		t.Fatal("compiled selected quota lost rate-limited/partial authority semantics")
+	}
+	t.Log("CONTROLLED_SCOPED_QUOTA_PASS: actual compiled plugin through Manager/SQLite/Core; rate-limited percent42; no recovery; no inference")
+}
 
 var (
 	cpaHost   = envOrDefault("CPA_HOST", "http://localhost:8317")

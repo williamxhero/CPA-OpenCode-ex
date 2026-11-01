@@ -1,3 +1,19 @@
+## SPEC #92 / #75: scoped management quota callbacks
+
+- Forward each quota invocation's host-issued `host_callback_id` through its
+  context and HTTP callback. No shared bridge/client state is replaced, and
+  concurrent inference callbacks remain independent.
+- Advertise `scoped_http` only in the updated quota provider and report the
+  native `default_quota_base_url` so hosts validate omitted-base requests against
+  the selected plugin's actual default. Existing explicit endpoints are unchanged.
+- This is additive JSON metadata/context propagation, not a C ABI change or a
+  new user setting. Old plugin binaries remain unsupported by the new scoped
+  Core quota operation; the host must not relax its capability check.
+- Core validates the original response's status/completeness from the same sole
+  request, rather than trusting the older lossy normalized quota buckets.
+- Controlled live coverage uses an explicitly supplied isolated Manager/Core/
+  SQLite/TLS fixture. It does not run the unrelated real-inference smoke suite.
+
 ## SPEC #2: catalog diagnostics and endpoint compatibility
 
 - Port the catalog diagnostic-message fix from xspeed1989/opencode-go-cliproxyapi commit 8e38b5d5d28e8a7d7eb535c8c1c42d2405c8e81b. Excluded model IDs/reasons are now visible with CPA's logging field allowlist; IDs stay quoted to prevent log injection.
