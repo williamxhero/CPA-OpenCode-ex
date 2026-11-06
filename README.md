@@ -1,5 +1,17 @@
 # OpenCode Go CLIProxyAPI Plugin
 
+## 本 fork 的功能
+
+相对上游 `massiveits/opencode-go-cliproxyapi`，这条主干增加：
+
+- 插件标识 `cpa-credential-opencode`，提供商仍是 `opencode-go`。
+- 凭证管理路由。有别名用别名，否则显示掩码；认证文件名不带密钥片段。
+- 原生额度：滚动、周、月三个窗口，查询落在当前选中的凭证上。
+- 模型目录路由，包括 Space Bunny 模型。
+- 选定凭证的额度回调范围，供宿主做身份围栏。
+
+完整清单见 [README-ex.md](README-ex.md)。
+
 A native dynamic Go plugin for [CLIProxyAPI](https://help.router-for.me/plugin/development) that exposes OpenCode Go as a single provider (`opencode-go`).
 
 The plugin unifies model discovery, protocol translation, and execution across OpenCode Go's upstream endpoints while leveraging CLIProxyAPI's built-in authentication, scheduling, keys rotation, and cooldown management.
@@ -49,29 +61,29 @@ CI handles release builds.
 
 ### Windows (AMD64)
 ```powershell
-go build -tags debug -buildmode=c-shared -o plugins/windows/amd64/opencode-go-cliproxyapi.dll .
+go build -tags debug -buildmode=c-shared -o plugins/windows/amd64/cpa-credential-opencode.dll .
 ```
 
 ### Linux (AMD64)
 ```bash
-go build -tags debug -buildmode=c-shared -o plugins/linux/amd64/opencode-go-cliproxyapi.so .
+go build -tags debug -buildmode=c-shared -o plugins/linux/amd64/cpa-credential-opencode.so .
 ```
 
 ### macOS (ARM64)
 ```bash
-go build -tags debug -buildmode=c-shared -o plugins/darwin/arm64/opencode-go-cliproxyapi.dylib .
+go build -tags debug -buildmode=c-shared -o plugins/darwin/arm64/cpa-credential-opencode.dylib .
 ```
 
 Place the compiled binary into your CLIProxyAPI plugin directory (e.g. `<cliproxyapi_root>/plugins/<os>/<arch>/`).
 
 ## Configuration
 
-Configure the plugin in your CLIProxyAPI `config.yaml` under `plugins.configs.opencode-go-cliproxyapi`:
+Configure the plugin in your CLIProxyAPI `config.yaml` under `plugins.configs.cpa-credential-opencode`:
 
 ```yaml
 plugins:
   configs:
-    opencode-go-cliproxyapi:
+    cpa-credential-opencode:
       # Upstream base URL (default: "https://opencode.ai/inference/go/v1")
       base-url: "https://opencode.ai/inference/go/v1"
 
@@ -170,7 +182,7 @@ go vet ./...
 ## Adding credentials from a management form
 
 With the plugin enabled, submit a management-authenticated request to
-`POST /v0/management/plugins/opencode-go-cliproxyapi/credentials`:
+`POST /v0/management/plugins/cpa-credential-opencode/credentials`:
 
 ```json
 {"base_url":"https://opencode.ai/inference/go/v1","api_key":"oc_sk_dummy_example","name":"Personal"}
