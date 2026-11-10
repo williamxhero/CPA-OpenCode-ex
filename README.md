@@ -2,6 +2,25 @@
 
 # OpenCode Go Plugin-EX 主要能力
 
+## 开始使用
+
+OpenCode Go 凭证插件运行在兼容的 CPA Core 宿主内，统一处理协议路由、凭证和原生额度查询。运行标识为 `cpa-credential-opencode`，Provider 为 `opencode-go`。
+
+- 上游配置及协议说明：[README-source.md](README-source.md)。
+- CPA-Manager-Plus-ex 的 `providers/opencode-go` 纳入统一发布；本仓库保留独立插件源码。
+
+需要 Go 1.26.7 或更高。构建共享库还需要启用 CGO，并提供对应平台的 C 编译器。
+
+```powershell
+go test ./...
+$env:CGO_ENABLED = '1'
+go build -buildmode=c-shared -o cpa-credential-opencode.dll .
+```
+
+插件与宿主必须使用兼容 SDK 构建。发布到本机 CPA 前，先完成独立加载验证，再通过带备份、健康检查和失败回退的部署脚本安装。
+
+## Fork 功能记录
+
 本页只列相对上游 massiveits/opencode-go-cliproxyapi 的主要功能。上游插件能完成基本转发，但多协议配置、凭证识别和宿主额度查询仍然割裂；本 fork 将它们收敛为一个可管理的 Provider。
 
 - **单一 Provider 与多协议路由**：上游需要为 Chat Completions、Messages 和 Responses 分别维护配置，密钥轮换和冷却也无法共享。本 fork 以 opencode-go 统一模型命名空间和密钥池，在插件内完成协议翻译、路由和调度。
