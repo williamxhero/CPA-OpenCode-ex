@@ -40,7 +40,7 @@ func (f *fakeClient) set(resp pluginapi.HTTPResponse, err error) {
 
 func testCfg() config.Config {
 	return config.Config{
-		CatalogURL:       "https://opencode.ai/inference/go/v1/models",
+		CatalogURL:       "https://opencode.ai/zen/go/v1/models",
 		ModelPrefix:      config.ModelPrefix{Enabled: true, Value: "opencode-go"},
 		MaxResponseBytes: 1 << 20,
 		Catalog:          config.Catalog{StaleWhileUnavailable: true},
@@ -95,7 +95,7 @@ func TestRefreshRequestShape(t *testing.T) {
 	if req.Method != "GET" {
 		t.Errorf("Method = %q, want GET", req.Method)
 	}
-	if req.URL != "https://opencode.ai/inference/go/v1/models" {
+	if req.URL != "https://opencode.ai/zen/go/v1/models" {
 		t.Errorf("URL = %q", req.URL)
 	}
 	if got := req.Headers.Get("Authorization"); got != "Bearer "+testKey {
@@ -206,7 +206,9 @@ func TestCompatExactIDs(t *testing.T) {
 		"muse-spark-1.3-contributor-free": RouteResponses,
 		"space-bunny-free":                RouteChatCompletions,
 		// Chat Completions.
-		"glm-5.3":           RouteChatCompletions,
+		"beam-free":               RouteChatCompletions,
+		"iceman-contributor-free": RouteChatCompletions,
+		"glm-5.3":                 RouteChatCompletions,
 		"glm-5.2":           RouteChatCompletions,
 		"glm-5.1":           RouteChatCompletions,
 		"kimi-k3":           RouteChatCompletions,
@@ -220,13 +222,14 @@ func TestCompatExactIDs(t *testing.T) {
 		"hy4-preview":       RouteChatCompletions,
 		"longcat-2.0":       RouteChatCompletions,
 		// Messages.
-		"minimax-m3":   RouteMessages,
-		"minimax-m2.7": RouteMessages,
-		"minimax-m2.5": RouteMessages,
-		"qwen3.8-max":  RouteMessages,
-		"qwen3.7-max":  RouteMessages,
-		"qwen3.7-plus": RouteMessages,
-		"qwen3.6-plus": RouteMessages,
+		"claude-haiku-5-5": RouteMessages,
+		"minimax-m3":       RouteMessages,
+		"minimax-m2.7":     RouteMessages,
+		"minimax-m2.5":     RouteMessages,
+		"qwen3.8-max":      RouteMessages,
+		"qwen3.7-max":      RouteMessages,
+		"qwen3.7-plus":     RouteMessages,
+		"qwen3.6-plus":     RouteMessages,
 	}
 	var sb strings.Builder
 	sb.WriteString(`{"data":[`)
@@ -268,6 +271,9 @@ func TestCompatPrefixFallback(t *testing.T) {
 		"hy3-extreme":    RouteChatCompletions,
 		"hy4-turbo":      RouteChatCompletions,
 		"longcat-max":    RouteChatCompletions,
+		"beam-x":         RouteChatCompletions,
+		"iceman-x":       RouteChatCompletions,
+		"claude-opus-x":  RouteMessages,
 		"GLM-5.2":        RouteChatCompletions,
 		"DeepSeek-V4-X":  RouteChatCompletions,
 		"HY3":            RouteChatCompletions,
@@ -296,6 +302,45 @@ func TestCompatPrefixFallback(t *testing.T) {
 		if want := cases[mo.UpstreamID]; mo.Protocol != want {
 			t.Errorf("%s: Protocol = %q, want %q", mo.UpstreamID, mo.Protocol, want)
 		}
+	}
+}
+
+func TestUpstreamAPIRouteAndModernCatalogShape(t *testing.T) {
+	// Live OpenCode catalogs advertise protocol under `api` and use name/limit/
+	// modalities instead of the older flat fields. Models without a known
+	// prefix (or with only an api hint) must still become routable.
+	body := `{"data":[
+		{"id":"beam-free","name":"Beam Free","limit":{"context":1048576,"output":131072},"modalities":{"input":["text"],"output":["text"]},"api":{"chat-completions":{}}},
+		{"id":"claude-haiku-5-5","name":"Claude Haiku 5.5","limit":{"context":1000000,"output":128000},"api":{"messages":{}}},
+		{"id":"iceman-contributor-free","name":"Iceman Contributor Free","api":{"chat-completions":{}}},
+		{"id":"mystery-with-api","name":"Mystery","api":{"responses":{}}},
+		{"id":"mystery-no-hint"}
+	]}`
+	fc := &fakeClient{resp: pluginapi.HTTPResponse{StatusCode: 200, Body: []byte(body)}}
+	m := newManager(testCfg(), fc)
+	mustRefresh(t, m)
+
+	beam := findModel(t, m.Models(), "beam-free")
+	if beam.DisplayName != "Beam Free" || beam.Protocol != RouteChatCompletions ||
+		beam.ContextLimit != 1048576 || beam.OutputLimit != 131072 ||
+		len(beam.InputModes) != 1 || beam.InputModes[0] != "text" {
+		t.Fatalf("beam mapping wrong: %+v", beam)
+	}
+	claude := findModel(t, m.Models(), "claude-haiku-5-5")
+	if claude.DisplayName != "Claude Haiku 5.5" || claude.Protocol != RouteMessages {
+		t.Fatalf("claude mapping wrong: %+v", claude)
+	}
+	iceman := findModel(t, m.Models(), "iceman-contributor-free")
+	if iceman.Protocol != RouteChatCompletions {
+		t.Fatalf("iceman protocol = %q", iceman.Protocol)
+	}
+	mystery := findModel(t, m.Models(), "mystery-with-api")
+	if mystery.Protocol != RouteResponses {
+		t.Fatalf("api hint should route mystery-with-api: %+v", mystery)
+	}
+	unsup := m.Unsupported()
+	if len(unsup) != 1 || unsup[0].UpstreamID != "mystery-no-hint" {
+		t.Fatalf("unsupported = %+v, want only mystery-no-hint", unsup)
 	}
 }
 
@@ -750,7 +795,7 @@ func TestJoinUpstreamURL(t *testing.T) {
 	cases := []struct{ base, endpoint string }{
 		{"https://opencode.ai", "/v1/chat/completions"},
 		{"https://opencode.ai/", "/v1/messages"},
-		{"https://opencode.ai/inference/go/v1", "/v1/responses"},
+		{"https://opencode.ai/zen/go/v1", "/v1/responses"},
 		{"https://opencode.ai", "v1@evil.com"},
 		{"https://opencode.ai", "/custom"},
 		{"https://opencode.ai/", ""},
@@ -774,9 +819,9 @@ func TestEndpointEscapesBase(t *testing.T) {
 	}{
 		{"https://opencode.ai", "/v1@evil.com/x", true},
 		{"https://opencode.ai", "@evil.com/", true},
-		{"https://opencode.ai/inference/go/v1", "/v1@evil.com/x", false}, // @ lands in path
+		{"https://opencode.ai/zen/go/v1", "/v1@evil.com/x", false}, // @ lands in path
 		{"https://opencode.ai", "/v1/chat/completions", false},
-		{"https://opencode.ai/inference/go/v1", "/v1/messages", false},
+		{"https://opencode.ai/zen/go/v1", "/v1/messages", false},
 		{"https://opencode.ai/", "/v1/responses", false},
 		{"https://OPENCODE.ai", "/v1/chat/completions", false}, // host compare is case-insensitive
 		{"https://opencode.ai", "v1@evil.com", true},
@@ -837,7 +882,7 @@ func TestEndpointEscapeExcludedFromRoutableSet(t *testing.T) {
 
 	t.Run("path-hosted base keeps same-host @ endpoint routable", func(t *testing.T) {
 		cfg := testCfg()
-		cfg.BaseURL = "https://opencode.ai/inference/go/v1"
+		cfg.BaseURL = "https://opencode.ai/zen/go/v1"
 		cfg.RouteOverrides = map[string]config.RouteOverride{
 			"glm-5.2": {Protocol: "chat-completions", Endpoint: "/v1@evil.com/x"},
 		}
