@@ -26,8 +26,9 @@ const ProviderID = "opencode-go"
 
 // pluginName / pluginVersion are reported in registration metadata.
 const (
-	pluginName    = "cpa-credential-opencode"
-	pluginVersion = "0.2.2"
+	pluginName = "cpa-credential-opencode"
+	// pluginVersion is the composed {source}+{ex} identity of this fork.
+	pluginVersion = generatedVersion
 )
 
 // githubRepoURL satisfies the host's validPlugin gate (host.go
