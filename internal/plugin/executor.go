@@ -316,7 +316,23 @@ func convertNonStream(route catalog.Route, sourceFormat string, status int, body
 // ToEnvelopeError redacts and propagates Retryable/HTTPStatus host-side.
 func classEnvelope(e *errclass.Error) []byte {
 	wire := errclass.ToEnvelopeError(e)
-	out, _ := json.Marshal(pluginabi.Envelope{OK: false, Error: &wire})
+	// The pinned SDK predates these additive ABI fields. Keep the embedded
+	// wire contract compatible while publishing the host-supported quota signal.
+	if e.CredentialScoped {
+		wire.Code = "credential_quota"
+	}
+	out, _ := json.Marshal(struct {
+		OK    bool `json:"ok"`
+		Error struct {
+			pluginabi.Error
+			CredentialScoped  bool `json:"credential_scoped,omitempty"`
+			RetryAfterSeconds int  `json:"retry_after_seconds,omitempty"`
+		} `json:"error"`
+	}{Error: struct {
+		pluginabi.Error
+		CredentialScoped  bool `json:"credential_scoped,omitempty"`
+		RetryAfterSeconds int  `json:"retry_after_seconds,omitempty"`
+	}{wire, e.CredentialScoped, e.RetryAfterSeconds}})
 	return out
 }
 

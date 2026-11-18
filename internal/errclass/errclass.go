@@ -27,10 +27,12 @@ const (
 
 // Error describes classified request errors and retryability for CPA execution.
 type Error struct {
-	Class      Class
-	Message    string
-	StatusCode int
-	Retryable  bool
+	Class             Class
+	Message           string
+	StatusCode        int
+	Retryable         bool
+	CredentialScoped  bool
+	RetryAfterSeconds int
 }
 
 func (e *Error) Error() string {
@@ -45,6 +47,9 @@ func (e *Error) Error() string {
 func FromStatus(status int, message string) *Error {
 	msg := Redact(message)
 	lowerMsg := strings.ToLower(msg)
+	if limited, reset := openCodeQuotaLimit(msg); status == 429 && limited {
+		return &Error{Class: ClassQuota, Message: msg, StatusCode: status, Retryable: true, CredentialScoped: true, RetryAfterSeconds: reset}
+	}
 	quota := strings.Contains(lowerMsg, "quota")
 	quotaClass := func(base Class) Class {
 		if quota {
